@@ -3,33 +3,40 @@ package co.ethpays.wallets.address.services;
 import co.ethpays.wallets.address.entity.User;
 import co.ethpays.wallets.address.repositories.AddressRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.bitcoinj.base.Address;
-import org.bitcoinj.base.ScriptType;
 import org.bitcoinj.base.Sha256Hash;
-import org.bitcoinj.base.exceptions.AddressFormatException;
-import org.bitcoinj.crypto.*;
-import org.bitcoinj.params.MainNetParams;
+import org.bitcoinj.crypto.ChildNumber;
+import org.bitcoinj.crypto.DeterministicKey;
+import org.bitcoinj.crypto.HDPath;
 import org.bitcoinj.wallet.DeterministicKeyChain;
 import org.bitcoinj.wallet.DeterministicSeed;
 import org.springframework.stereotype.Service;
+import org.web3j.crypto.*;
+import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.methods.response.EthGetBalance;
+import org.web3j.protocol.http.HttpService;
 
 import java.io.*;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 
 @Service
 @Slf4j
-public class BitcoinService {
+public class EthereumService {
     private final AddressRepository addressRepository;
     private final SecureRandom secureRandom = new SecureRandom();
     private DeterministicSeed seed;
-    private final String SEED_FILE_PATH = "seed.dat";
+    private final String SEED_FILE_PATH = "eth_seed.dat";
+    private final Web3j web3j;
 
-    public BitcoinService(AddressRepository addressRepository) {
+    public EthereumService(AddressRepository addressRepository) {
         this.addressRepository = addressRepository;
+        this.web3j = Web3j.build(new HttpService("https://mainnet.infura.io/v3/2e6b5f18002c4e988f15d92de6309bc0"));
         seed = loadSeedFromStorage();
         if (seed == null) {
             byte[] entropy = new byte[16];
@@ -45,9 +52,10 @@ public class BitcoinService {
         byte[] usernameHash = Sha256Hash.hash(usernameBytes);
         int usernameIndex = ByteBuffer.wrap(usernameHash).getInt();
 
-        List<ChildNumber> path = HDPath.parsePath("M/44H/0H/0H/" + usernameIndex);
+        List<ChildNumber> path = HDPath.parsePath("M/44H/60H/0H/0/" + usernameIndex);
         DeterministicKey key = keyChain.getKeyByPath(path, true);
-        return key.toAddress(ScriptType.P2PKH, MainNetParams.get().network()).toString();
+        ECKeyPair ecKeyPair = ECKeyPair.create(key.getPrivKeyBytes());
+        return Keys.getAddress(ecKeyPair);
     }
 
     private DeterministicSeed loadSeedFromStorage() {
@@ -72,7 +80,7 @@ public class BitcoinService {
     }
 
     private void storeAddressToStorage(String address) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter("addresses.dat", true))) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("eth_addresses.dat", true))) {
             writer.write(address);
             writer.newLine();
         } catch (IOException e) {
@@ -82,7 +90,7 @@ public class BitcoinService {
 
     private List<String> loadAddressesFromStorage() {
         List<String> addresses = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader("addresses.dat"))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader("eth_addresses.dat"))) {
             String address;
             while ((address = reader.readLine()) != null) {
                 addresses.add(address);
@@ -95,15 +103,15 @@ public class BitcoinService {
 
     public String generateAndStoreAddresses(User user) {
         String address = generateNewAddress(user.getUsername());
-        if (isValidBitcoinAddress(address)) {
+        if (isValidEthereumAddress(address)) {
             storeAddressToStorage(address);
             co.ethpays.wallets.address.entity.Address depositAddress = new co.ethpays.wallets.address.entity.Address();
             depositAddress.setAddress(address);
-            depositAddress.setCurrency("btc");
+            depositAddress.setCurrency("eth");
             depositAddress.setUser(user);
             addressRepository.save(depositAddress);
         } else {
-            logger.error("Generated an invalid Bitcoin Address: " + address);
+            logger.error("Generated an invalid Ethereum Address: " + address);
         }
         return address;
     }
@@ -116,12 +124,12 @@ public class BitcoinService {
         }
     }
 
-    public boolean isValidBitcoinAddress(String address) {
-        try {
-            Address.fromString(MainNetParams.get(), address);
-            return true;
-        } catch (AddressFormatException e) {
-            return false;
-        }
+    public boolean isValidEthereumAddress(String address) {
+        return WalletUtils.isValidAddress(address);
+    }
+
+    public BigInteger getBalance(String address) throws ExecutionException, InterruptedException {
+        EthGetBalance ethGetBalance = web3j.ethGetBalance(address, DefaultBlockParameterName.LATEST).sendAsync().get();
+        return ethGetBalance.getBalance();
     }
 }
