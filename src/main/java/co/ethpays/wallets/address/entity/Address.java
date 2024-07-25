@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.sql.Timestamp;
+
 @Getter
 @Setter
 @Entity
@@ -15,8 +17,16 @@ public class Address {
 
     private String address;
     private String currency;
+    private String userId;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id")
-    private User user;
+    @Column(nullable = false, columnDefinition = "varchar(255) default 'mainnet'")
+    private String network = "mainnet";
+
+    private double balance;
+
+    private Timestamp lastSwept;
+
+//    @ManyToOne
+//    @JoinColumn(name = "user_id")
+//    private User user;
 }

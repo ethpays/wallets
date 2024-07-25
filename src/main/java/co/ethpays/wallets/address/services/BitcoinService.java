@@ -27,6 +27,7 @@ public class BitcoinService {
     private final SecureRandom secureRandom = new SecureRandom();
     private DeterministicSeed seed;
     private final String SEED_FILE_PATH = "seed.dat";
+    private final String ADDRESSES_FILE_PATH = "addresses.dat";
 
     public BitcoinService(AddressRepository addressRepository) {
         this.addressRepository = addressRepository;
@@ -72,7 +73,7 @@ public class BitcoinService {
     }
 
     private void storeAddressToStorage(String address) {
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter("addresses.dat", true))) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(ADDRESSES_FILE_PATH, true))) {
             writer.write(address);
             writer.newLine();
         } catch (IOException e) {
@@ -82,7 +83,7 @@ public class BitcoinService {
 
     private List<String> loadAddressesFromStorage() {
         List<String> addresses = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(new FileReader("addresses.dat"))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(ADDRESSES_FILE_PATH))) {
             String address;
             while ((address = reader.readLine()) != null) {
                 addresses.add(address);
@@ -100,7 +101,7 @@ public class BitcoinService {
             co.ethpays.wallets.address.entity.Address depositAddress = new co.ethpays.wallets.address.entity.Address();
             depositAddress.setAddress(address);
             depositAddress.setCurrency("btc");
-            depositAddress.setUser(user);
+            depositAddress.setUserId(user.getUsername());
             addressRepository.save(depositAddress);
         } else {
             logger.error("Generated an invalid Bitcoin Address: " + address);

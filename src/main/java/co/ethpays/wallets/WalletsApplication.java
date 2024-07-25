@@ -10,9 +10,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableJpaRepositories
 @EnableScheduling
 public class WalletsApplication {
-
 	public static void main(String[] args) {
 		SpringApplication.run(WalletsApplication.class, args);
 	}
-
 }
