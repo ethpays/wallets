@@ -28,6 +28,7 @@ public class User {
     private String userLogo;
     private String userLanguage;
     private String userTimezone;
+    private String SpotUserId;
 
     private boolean disabled;
     private boolean TwoFactorEnabled;

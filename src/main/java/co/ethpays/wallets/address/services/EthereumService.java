@@ -1,7 +1,10 @@
 package co.ethpays.wallets.address.services;
 
+import co.ethpays.wallets.address.entity.Transaction;
 import co.ethpays.wallets.address.entity.User;
+import co.ethpays.wallets.address.managers.BalanceManager;
 import co.ethpays.wallets.address.repositories.AddressRepository;
+import co.ethpays.wallets.address.repositories.TransactionRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.bitcoinj.base.Sha256Hash;
 import org.bitcoinj.crypto.ChildNumber;
@@ -13,7 +16,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.web3j.crypto.*;
 import org.web3j.protocol.Web3j;
+import org.web3j.protocol.core.DefaultBlockParameter;
 import org.web3j.protocol.core.DefaultBlockParameterName;
+import org.web3j.protocol.core.methods.response.EthBlock;
 import org.web3j.protocol.core.methods.response.EthGetBalance;
 import org.web3j.protocol.core.methods.response.EthSendTransaction;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
@@ -30,21 +35,27 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.sql.Timestamp;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
 @Service
 @Slf4j
 public class EthereumService {
     private final AddressRepository addressRepository;
+    private final TransactionRepository transactionRepository;
+    private final BalanceManager balanceManager;
     private final SecureRandom secureRandom = new SecureRandom();
     private DeterministicSeed seed;
     private final String SEED_FILE_PATH = "eth_seed.dat";
     private final Web3j web3j;
     private final String COLD_WALLET_ADDRESS = "0x126c1742dA49b8E096D3816935FE0547ec083bCc"; // Replace with your actual cold wallet address
 
-    public EthereumService(AddressRepository addressRepository) {
+    public EthereumService(AddressRepository addressRepository, TransactionRepository transactionRepository, BalanceManager balanceManager) {
         this.addressRepository = addressRepository;
+        this.transactionRepository = transactionRepository;
+        this.balanceManager = balanceManager;
         this.web3j = Web3j.build(new HttpService("https://sepolia.infura.io/v3/2e6b5f18002c4e988f15d92de6309bc0"));
         seed = loadSeedFromStorage();
         if (seed == null) {
@@ -136,6 +147,22 @@ public class EthereumService {
         return WalletUtils.isValidAddress(address);
     }
 
+    private org.web3j.protocol.core.methods.response.Transaction getLatestTransaction(String address) throws ExecutionException, InterruptedException, IOException {
+        BigInteger latestBlockNumber = web3j.ethBlockNumber().send().getBlockNumber();
+
+        for (BigInteger i = latestBlockNumber; i.compareTo(BigInteger.ZERO) >= 0; i = i.subtract(BigInteger.ONE)) {
+            EthBlock block = web3j.ethGetBlockByNumber(DefaultBlockParameter.valueOf(i), true).send();
+            List<EthBlock.TransactionResult> transactions = block.getBlock().getTransactions();
+            for (EthBlock.TransactionResult transactionResult : transactions) {
+                org.web3j.protocol.core.methods.response.Transaction transaction = (org.web3j.protocol.core.methods.response.Transaction) transactionResult.get();
+                if (transaction.getTo() != null && transaction.getTo().equalsIgnoreCase(address)) {
+                    return transaction;
+                }
+            }
+        }
+        return null; // Return null if no transaction is found
+    }
+
     @Scheduled(fixedRate = 5000)
     public void checkDeposits() {
         List<co.ethpays.wallets.address.entity.Address> addresses = addressRepository.findByCurrency("eth");
@@ -149,14 +176,28 @@ public class EthereumService {
                     if (balanceInEther.doubleValue() > accountBalance) {
                         double depositAmount = balanceInEther.doubleValue() - accountBalance;
                         logger.info("Address " + address + " has received a deposit of " + depositAmount + " ETH. New balance: " + balanceInEther.toString() + " ETH");
-                        // Update the balance in your database here
                         addressEntity.setBalance(balanceInEther.doubleValue());
+
+                        org.web3j.protocol.core.methods.response.Transaction latestTransaction = getLatestTransaction(address);
+                        String fromAddress = latestTransaction != null ? latestTransaction.getFrom() : "unknown";
+
+                        Transaction depositTransaction = new Transaction();
+                        depositTransaction.setAmount(depositAmount);
+                        depositTransaction.setUsername(addressEntity.getUserId());
+                        depositTransaction.setCurrency(addressEntity.getCurrency());
+                        depositTransaction.setFromWallet(fromAddress);
+                        depositTransaction.setToWallet(address);
+                        depositTransaction.setType("deposit");
+                        depositTransaction.setStatus("completed");
+                        depositTransaction.setTransactionId(UUID.randomUUID().toString());
+                        depositTransaction.setCreatedAt(new Date());
+                        depositTransaction.setTitle("Ethereum Deposit");
+
+                        balanceManager.depositBalance(addressEntity.getUserId(), addressEntity.getCurrency(), depositAmount, "futures");
+
+                        transactionRepository.save(depositTransaction);
                         addressRepository.save(addressEntity);
-                    } else {
-                        logger.info("Address " + address + " did not receive any new deposit. Balance: " + balanceInEther.toString() + " ETH");
                     }
-                } else {
-                    logger.info("Address " + address + " has a balance of 0");
                 }
             } catch (ExecutionException | InterruptedException e) {
                 logger.error("Error checking balance for address: " + address, e);
@@ -166,7 +207,9 @@ public class EthereumService {
                 logger.error("Unexpected error for address: " + address, e);
             }
         }
+        logger.info("[Ethereum Service]: Watchdog scanned "+addresses.size()+" addresses in total.");
     }
+
 
     private BigInteger getBalance(String address) throws ExecutionException, InterruptedException {
         EthGetBalance ethGetBalance = web3j.ethGetBalance(address, DefaultBlockParameterName.LATEST).sendAsync().get();
