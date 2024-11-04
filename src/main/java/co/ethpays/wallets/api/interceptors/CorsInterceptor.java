@@ -14,7 +14,7 @@ public class CorsInterceptor implements WebMvcConfigurer {
         registry.addMapping("/**")
                 .allowedOrigins("*")
                 .allowedMethods("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS")
-                .allowedHeaders("Origin", "Content-Type", "X-Auth-Token", "Authorization")
+                .allowedHeaders("Origin", "Content-Type", "X-Auth-Token", "Authorization", "EthpaysAdmin-Token", "EthpaysSystem-Token")
                 .maxAge(3600); // Optional: set the maximum age (in seconds) of the preflight OPTIONS request
     }
 }

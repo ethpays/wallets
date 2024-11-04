@@ -96,15 +96,19 @@ public class BitcoinService {
 
     public String generateAndStoreAddresses(User user) {
         String address = generateNewAddress(user.getUsername());
-        if (isValidBitcoinAddress(address)) {
-            storeAddressToStorage(address);
-            co.ethpays.wallets.address.entity.Address depositAddress = new co.ethpays.wallets.address.entity.Address();
-            depositAddress.setAddress(address);
-            depositAddress.setCurrency("btc");
-            depositAddress.setUserId(user.getUsername());
-            addressRepository.save(depositAddress);
-        } else {
-            logger.error("Generated an invalid Bitcoin Address: " + address);
+
+        co.ethpays.wallets.address.entity.Address addressToCheck = addressRepository.findByAddress(address);
+        if (addressToCheck == null) {
+            if (isValidBitcoinAddress(address)) {
+                storeAddressToStorage(address);
+                co.ethpays.wallets.address.entity.Address depositAddress = new co.ethpays.wallets.address.entity.Address();
+                depositAddress.setAddress(address);
+                depositAddress.setCurrency("btc");
+                depositAddress.setUserId(user.getUsername());
+                addressRepository.save(depositAddress);
+            } else {
+                logger.error("Generated an invalid Bitcoin Address: " + address);
+            }
         }
         return address;
     }

@@ -21,6 +21,7 @@ public class Balance {
     private double available; //available
     private double pending; //in process
     private double locked; //in trade
+    private double totalDeposited;
 
     private boolean isSystemAccount; //true if system account (trading, fees, etc)
     private boolean isEthpaysAccount; //true if ethpays account (employee, marketing, etc)

@@ -20,6 +20,7 @@ public class BalanceManager {
             balance.setUsername(username);
             balance.setCurrency(currency);
             balance.setBalance(amount);
+            balance.setTotalDeposited(balance.getTotalDeposited() + amount);
             balanceRepository.save(balance);
         } else {
             double newBalance = balance.getBalance() + amount;

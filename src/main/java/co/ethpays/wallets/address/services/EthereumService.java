@@ -1,5 +1,6 @@
 package co.ethpays.wallets.address.services;
 
+import co.ethpays.wallets.address.entity.Address;
 import co.ethpays.wallets.address.entity.Transaction;
 import co.ethpays.wallets.address.entity.User;
 import co.ethpays.wallets.address.managers.BalanceManager;
@@ -122,24 +123,23 @@ public class EthereumService {
     }
 
     public String generateAndStoreAddresses(User user) {
-        List<co.ethpays.wallets.address.entity.Address> existingAddresses = addressRepository.findByUserIdAndCurrency(user.getUsername(), "eth");
-        if (!existingAddresses.isEmpty()) {
-            return existingAddresses.get(0).getAddress();
-        }
         String address = generateNewAddress(user.getUsername());
 
-        if (isValidEthereumAddress(address)) {
-            storeAddressToStorage(address);
-            co.ethpays.wallets.address.entity.Address depositAddress = new co.ethpays.wallets.address.entity.Address();
-            depositAddress.setAddress("0x" + address);
-            depositAddress.setCurrency("eth");
-            depositAddress.setBalance(0.0000000000000000000);
-            depositAddress.setUserId(user.getUsername());
-            addressRepository.save(depositAddress);
-        } else {
-            logger.error("Generated an invalid Ethereum Address: " + address);
-        }
+        Address addressToCheck = addressRepository.findByAddress("0x"+address);
+        if (addressToCheck == null) {
+            if (isValidEthereumAddress(address)) {
+                storeAddressToStorage(address);
+                Address depositAddress = new Address();
+                depositAddress.setAddress("0x" + address);
+                depositAddress.setCurrency("eth");
+                depositAddress.setBalance(0.0000000000000000000);
+                depositAddress.setUserId(user.getUsername());
+                addressRepository.save(depositAddress);
+            } else {
+                logger.error("Generated an invalid Ethereum Address: " + address);
+            }
 
+        }
         return "0x"+address;
     }
 
